@@ -1,0 +1,265 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <DIYables_IRcontroller.h> // DIYables_IRcontroller library
+#define IR_RECEIVER_PIN 2 // The Arduino pin connected to IR controller
+
+DIYables_IRcontroller_17 irController(IR_RECEIVER_PIN, 200); // debounce time is 200ms
+
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
+
+
+// Buttons
+const int btnA = IR_RECEIVER_PIN;
+
+
+const int btnB = 3;
+const int btnReset = 4;
+
+// Points (normal games)
+int pointsA = 0;
+int pointsB = 0;
+
+// Games
+int gamesA = 0;
+int gamesB = 0;
+
+// Sets
+int setsA = 0;
+int setsB = 0;
+
+// Tiebreak
+bool inTiebreak = false;
+int tbA = 0;
+int tbB = 0;
+
+// Convert normal tennis points
+String pointText(int p) {
+  if (p == 0) return "0";
+  if (p == 1) return "15";
+  if (p == 2) return "30";
+  if (p == 3) return "40";
+  return "";
+}
+
+// Reset helpers
+void resetPoints() {
+  pointsA = 0;
+  pointsB = 0;
+}
+
+void resetGames() {
+  gamesA = 0;
+  gamesB = 0;
+  resetPoints();
+}
+
+void resetTiebreak() {
+  tbA = 0;
+  tbB = 0;
+  inTiebreak = false;
+}
+
+void resetMatch() {
+  resetPoints();
+  resetGames();
+  resetTiebreak();
+  setsA = 0;
+  setsB = 0;
+  updateDisplay();
+}
+
+// LCD update
+void updateDisplay() {
+  lcd.clear();
+
+  // TIEBREAK DISPLAY
+  if (inTiebreak) {
+    lcd.setCursor(0, 0);
+    lcd.print("   TIEBREAK");
+
+    lcd.setCursor(0, 1);
+    lcd.print("A:");
+    lcd.print(tbA);
+    lcd.print("  B:");
+    lcd.print(tbB);
+    return;
+  }
+
+  // DEUCE
+  if (pointsA >= 3 && pointsB >= 3 && pointsA == pointsB) {
+    lcd.setCursor(0, 0);
+    lcd.print("     DEUCE");
+    lcd.setCursor(0, 1);
+    lcd.print("G:");
+    lcd.print(gamesA);
+    lcd.print("-");
+    lcd.print(gamesB);
+    lcd.print(" S:");
+    lcd.print(setsA);
+    lcd.print("-");
+    lcd.print(setsB);
+    return;
+  }
+
+  // ADVANTAGE
+  if (pointsA >= 3 && pointsB >= 3) {
+    lcd.setCursor(0, 0);
+    if (pointsA > pointsB) lcd.print("  AD Player A");
+    else lcd.print("  AD Player B");
+
+    lcd.setCursor(0, 1);
+    lcd.print("G:");
+    lcd.print(gamesA);
+    lcd.print("-");
+    lcd.print(gamesB);
+    lcd.print(" S:");
+    lcd.print(setsA);
+    lcd.print("-");
+    lcd.print(setsB);
+    return;
+  }
+
+  // NORMAL DISPLAY
+  lcd.setCursor(0, 0);
+  lcd.print("A P:");
+  lcd.print(pointText(pointsA));
+  lcd.print(" G:");
+  lcd.print(gamesA);
+  lcd.print(" S:");
+  lcd.print(setsA);
+
+  lcd.setCursor(0, 1);
+  lcd.print("B P:");
+  lcd.print(pointText(pointsB));
+  lcd.print(" G:");
+  lcd.print(gamesB);
+  lcd.print(" S:");
+  lcd.print(setsB);
+}
+
+// GAME WIN
+void checkGameWin() {
+  if (pointsA >= 4 && pointsA >= pointsB + 2) {
+    gamesA++;
+    resetPoints();
+  }
+
+  if (pointsB >= 4 && pointsB >= pointsA + 2) {
+    gamesB++;
+    resetPoints();
+  }
+
+  // Enter tiebreak at 6–6
+  if (gamesA == 6 && gamesB == 6) {
+    inTiebreak = true;
+    resetPoints();
+  }
+}
+
+// SET WIN (normal)
+void checkSetWin() {
+  if (!inTiebreak) {
+    if (gamesA >= 6 && gamesA >= gamesB + 2) {
+      setsA++;
+      resetGames();
+    }
+
+    if (gamesB >= 6 && gamesB >= gamesA + 2) {
+      setsB++;
+      resetGames();
+    }
+  }
+}
+
+// TIEBREAK WIN
+void checkTiebreakWin() {
+  if (tbA >= 7 && tbA >= tbB + 2) {
+    setsA++;
+    resetGames();
+    resetTiebreak();
+  }
+
+  if (tbB >= 7 && tbB >= tbA + 2) {
+    setsB++;
+    resetGames();
+    resetTiebreak();
+  }
+}
+
+void setup() {
+  lcd.init();
+  lcd.backlight();
+
+  pinMode(btnA, INPUT_PULLUP);
+  pinMode(btnB, INPUT_PULLUP);
+  pinMode(btnReset, INPUT_PULLUP);
+
+  updateDisplay();
+
+  Serial.begin(9600);
+  irController.begin();
+}
+
+void loop() {
+
+  if (digitalRead(btnA) == LOW) {
+
+
+    if (inTiebreak) {
+      tbA++;
+      checkTiebreakWin();
+    } else {
+      pointsA++;
+      checkGameWin();
+      checkSetWin();
+    }
+    updateDisplay();
+    delay(300);
+  }
+
+  if (digitalRead(btnB) == LOW) {
+    if (inTiebreak) {
+      tbB++;
+      checkTiebreakWin();
+    } else {
+      pointsB++;
+      checkGameWin();
+      checkSetWin();
+    }
+    updateDisplay();
+    delay(300);
+  }
+
+
+
+Key17 key = irController.getKey();
+  if (key != Key17::NONE) {
+    switch (key) {
+    case Key17::KEY_STAR:
+        Serial.println("*");
+        // TODO: YOUR CONTROL
+        resetGames();
+    delay(300);
+        break;
+
+      case Key17::KEY_0:
+        Serial.println("0");
+        // TODO: YOUR CONTROL
+        resetPoints();
+        delay(300);
+        break;
+
+      case Key17::KEY_SHARP:
+        Serial.println("#");
+        // TODO: YOUR CONTROL
+        resetMatch();
+    delay(300);
+        break;
+
+    }
+  }
+  if (digitalRead(btnReset) == LOW) {
+    resetMatch();
+    delay(300);
+  }
+}
